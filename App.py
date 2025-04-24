@@ -1,96 +1,94 @@
 from Container.imports_library import *
-import Menus, Map
+import Building_Items
+screenWidth, screenHeight = 700, 700
 
-# main
+# Grid
+class CreateGrid:
+    def __init__(self, spacing=(40, 40), offset=(0, 0), width=1, color=pygame.Color("black")):
+        self.base_spacing = spacing
+        self.spacing = list(spacing)
+        self.offset = list(offset)
+        self.width = width
+        self.color = color
+
+    def pan(self, dx, dy):
+        self.offset[0] += dx
+        self.offset[1] += dy
+
+    def draw(self, screen):
+        screen_width, screen_height = screen.get_size()
+        for x in range(-self.spacing[0], screen_width + self.spacing[0], self.spacing[0]):
+            draw_x = x + self.offset[0] % self.spacing[0]
+            pygame.draw.line(screen, self.color, (draw_x, 0), (draw_x, screen_height), self.width)
+
+        for y in range(-self.spacing[1], screen_height + self.spacing[1], self.spacing[1]):
+            draw_y = y + self.offset[1] % self.spacing[1]
+            pygame.draw.line(screen, self.color, (0, draw_y), (screen_width, draw_y), self.width)
+
+# application
 class Application:
     def __init__(self):
-        super().__init__()
         pygame.init()
-        self.screenWidth, self.screenHeight = 700, 700
-        self.screen = pygame.display.set_mode((self.screenWidth, self.screenHeight), pygame.RESIZABLE)
+        self.screen = pygame.display.set_mode((screenWidth, screenHeight), pygame.RESIZABLE)
         self.clock = pygame.time.Clock()
         self.running = True
-        self.middle_pressed = False
-        self.change_map = False
-        self.x, self.y = 0, 0 
-        pygame.display.set_caption("App")
-        self.menus()
-        self.map_size = (10,10)
-        self.map_manager = Map.Ground(screen_size=self.screen.get_size(), cell_size=self.map_size, active_color=pygame.Color("Red"))
-        self.x, self.y = 0, 0 
-        self.map_manager.move_camera(self.x, self.y)
+        self.dragging = False
+        self.start_offset = (0, 0)
+        # objects
+        self.all_sprites = pygame.sprite.Group()
+        self.item_list = pygame.sprite.Group()
+        self.grid = CreateGrid()
+        self.build_panel = Building_Items.BuildingPanel(grid=self.grid, position=(10, 10), scale=(100, 200))
+        self.build_panel.add_item(Building_Items.BuildingSegments, position=(10, 10), scale=(40, 40), grid=self.grid)
+        self.build_panel.add_item(Building_Items.BuildingSegments, position=(10, 10), scale=(40, 40), grid=self.grid, color=pygame.Color("green"))
 
-    def on_resize(self) -> None:
-        window_size = self.screen.get_size()
-        new_w, new_h = window_size[0], window_size[1]
-        # main menu
-        self.Main_Menu.main_menu.resize(new_w, new_h)
-        self.Main_Menu.load_game_screen.resize(new_w, new_h)
-        self.Main_Menu.settings_screen.resize(new_w, new_h)
-
-        self.Pause_Menu.pause_menu.resize(new_w, new_h)
-        self.Pause_Menu.settings_screen.resize(new_w, new_h)
-
-    def menus(self):
-        self.Main_Menu = Menus.MainMenu(self.screen)
-        self.Pause_Menu = Menus.PauseMenu(self.screen)
-        
     def run(self):
         while self.running:
-            events = pygame.event.get()
-            for event in events:
+            for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                    pygame.quit()
                     sys.exit()
                 elif event.type == pygame.VIDEORESIZE:
                     self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
-                    self.map_manager.update_screen_size((event.w, event.h))
-                    self.on_resize()
-                # menu
-                if event.type == pygame.KEYDOWN:
-                    if (event.key == pygame.K_p) and self.Main_Menu.play:
-                        self.Pause_Menu.play = not(self.Pause_Menu.play)
-                if self.Main_Menu.play and not self.change_map:
-                    self.map_manager = Map.Ground(screen_size=self.screen.get_size(), cell_size=self.map_size, active_color=pygame.Color("Red"))
-                    self.x, self.y = 0, 0 
-                    self.map_manager.move_camera(self.x, self.y)
-                    self.change_map = True
-                # move map
-                if self.Main_Menu.play and self.Pause_Menu.play:
-                    if event.type == pygame.MOUSEBUTTONDOWN:
-                        if event.button == 2:
-                            self.middle_pressed = True
-                    elif event.type == pygame.MOUSEBUTTONUP:
-                        if event.button == 2:
-                            self.middle_pressed = False
-                            self.x, self.y = event.pos
-                    elif event.type == pygame.MOUSEMOTION:
-                        if self.middle_pressed:
-                            self.map_manager.move_camera(self.x,self.y)
-                    self.map_manager.handle_event(event)
-            self.screen.fill(pygame.Color("black"))
-            # map
-            if self.Main_Menu.play and self.Pause_Menu.play:
-                self.map_manager.draw(screen=self.screen)
-            # menu update
-            if (not self.Main_Menu.play) or self.Pause_Menu.exit_game_varible:
-                self.Main_Menu.main_menu.update(events)
-                self.Main_Menu.main_menu.draw(self.screen)
-            elif self.Main_Menu.play and (not self.Pause_Menu.play):
-                self.Pause_Menu.pause_menu.update(events)
-                self.Pause_Menu.pause_menu.draw(self.screen)
-            if self.Pause_Menu.exit_game_varible:
-                self.Main_Menu.play = False
-                self.Pause_Menu.exit_game_varible = False
-                self.Pause_Menu.play = True
-                self.Pause_Menu.restart_game = False
-                self.change_map = False
+                # Objects
+                self.build_panel.handle_event(event=event, all_sprites=self.all_sprites, item_list=self.item_list)
+                # Grad
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 3:
+                        for i in self.item_list:
+                            if i.hovered:
+                                i.kill()
+                                self.item_list.remove(i)
+                                self.all_sprites.remove(i)
+                    if event.button == 2:
+                        self.dragging = True
+                        self.start_offset = event.pos
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    if event.button == 2:
+                        self.dragging = False
+                elif event.type == pygame.MOUSEMOTION:
+                    if self.dragging:
+                        dx = event.pos[0] - self.start_offset[0]
+                        dy = event.pos[1] - self.start_offset[1]
+                        for item in self.item_list:
+                            item.update_transform((dx, dy))
+                        self.grid.pan(dx, dy)
+                        self.start_offset = event.pos
+                # --->
+                for i in self.item_list:
+                    i.handle_event(event)
+
+            self.screen.fill(pygame.Color("white"))
+            self.grid.draw(self.screen)
+            self.build_panel.draw(screen=self.screen)
+
+            self.all_sprites.update()
+            self.all_sprites.draw(self.screen)
             # This is to update the scene
             self.clock.tick(64)
             pygame.display.flip()
             pygame.display.update()
 
-# loop
 if __name__ == "__main__":
-    application = Application()
-    application.run()
+    Application().run()
